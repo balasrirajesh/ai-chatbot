@@ -1,6 +1,7 @@
 import { aiService } from './aiService.js';
 import { SchemaValidator } from './schemaValidator.js';
 import { JDValidator } from './jdValidator.js';
+import { JDNormalizer } from './jdNormalizer.js';
 import { InputValidator } from './inputValidator.js';
 
 export class JDAnalyzer {
@@ -62,11 +63,14 @@ Return only the valid JSON response adhering to the schema.`;
     // 2. Rule Consistency Validation & Multiplier Normalization
     const validatedProfile = JDValidator.validateAndNormalize(sanitizedJdText, sanitizedSchema);
     
+    // 3. Canonical Normalization & Immutability Freeze
+    const frozenProfile = JDNormalizer.normalizeAndFreeze(validatedProfile);
+
     return {
       rawText: sanitizedJdText,
       sourceType,
       filename,
-      ...validatedProfile
+      ...frozenProfile
     };
   }
 

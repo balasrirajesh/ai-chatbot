@@ -14,7 +14,9 @@ export class JDNormalizer {
     const requirements = (validatedProfile.requirements || []).map((req, index) => {
       const priority = req.priority || 'MEDIUM';
       const multiplier = req.multiplier || JDValidator.PRIORITY_MULTIPLIERS[priority] || 1.5;
-      const weight = typeof req.normalizedWeight === 'number' ? req.normalizedWeight : 0.1;
+      const weight = typeof req.normalizedWeight === 'number' 
+        ? req.normalizedWeight 
+        : (typeof req.weight === 'number' ? req.weight : 0.1);
 
       return {
         id: `req_${index + 1}`,
@@ -23,21 +25,24 @@ export class JDNormalizer {
         priority,
         multiplier,
         weight,
+        normalizedWeight: weight,
         reason: req.reason || '',
         isPrimaryTech: req.isPrimaryTech || false
       };
     });
 
-    return {
+    const frozenProfile = {
       jobTitle: validatedProfile.jobTitle || 'Software Role',
       primaryRole: validatedProfile.primaryRole || validatedProfile.jobTitle || 'Developer',
       summary: validatedProfile.summary || '',
       primaryTechnologies: validatedProfile.primaryTechnologies || [],
       experienceYearsRequired: Number(validatedProfile.experienceYearsRequired || 0),
-      requirements,
+      requirements: Object.freeze(requirements.map(r => Object.freeze(r))),
       createdAt: new Date().toISOString(),
       frozen: true,
       frozenAt: new Date()
     };
+
+    return Object.freeze(frozenProfile);
   }
 }
