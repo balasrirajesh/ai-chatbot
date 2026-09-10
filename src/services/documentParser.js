@@ -48,14 +48,14 @@ export class DocumentParser {
   }
 
   /**
-   * Generic extractor based on file extension
+   * Generic extractor based on file extension (Supports PDF, DOCX, and TXT only)
    */
   static async parseDocument(filePath, originalFilename = '') {
     const ext = (path.extname(originalFilename || filePath) || '').toLowerCase();
     
     if (ext === '.pdf') {
       return await this.parsePDF(filePath);
-    } else if (ext === '.docx' || ext === '.doc') {
+    } else if (ext === '.docx') {
       return await this.parseDOCX(filePath);
     } else if (ext === '.txt') {
       const content = await fs.readFile(filePath, 'utf-8');

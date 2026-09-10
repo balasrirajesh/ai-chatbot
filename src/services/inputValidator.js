@@ -47,11 +47,11 @@ export class InputValidator {
   }
 
   /**
-   * Validate document file upload metadata
+   * Validate document file upload metadata (Supports PDF, DOCX, and TXT only)
    */
   static validateDocumentFile(filename, fileSizeMb, maxAllowedMb = 10) {
     const ext = (path.extname(filename || '') || '').toLowerCase();
-    const supportedExts = ['.pdf', '.docx', '.doc', '.txt'];
+    const supportedExts = ['.pdf', '.docx', '.txt'];
 
     if (!supportedExts.includes(ext)) {
       return {

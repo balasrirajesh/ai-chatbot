@@ -11,12 +11,21 @@ export class JDNormalizer {
       throw new Error('Cannot normalize invalid JD profile structure.');
     }
 
-    const requirements = (validatedProfile.requirements || []).map((req, index) => {
+    if (!Array.isArray(validatedProfile.requirements) || validatedProfile.requirements.length === 0) {
+      throw new Error('JD profile must contain a non-empty requirements array.');
+    }
+
+    const requirements = validatedProfile.requirements.map((req, index) => {
       const priority = req.priority || 'MEDIUM';
-      const multiplier = req.multiplier || JDValidator.PRIORITY_MULTIPLIERS[priority] || 1.5;
-      const normalizedWeight = typeof req.normalizedWeight === 'number' 
-        ? req.normalizedWeight 
-        : (typeof req.weight === 'number' ? req.weight : 10.0);
+      const multiplier = req.multiplier || JDValidator.PRIORITY_MULTIPLIERS[priority];
+      
+      if (!multiplier || isNaN(multiplier)) {
+        throw new Error(`Invalid priority multiplier for requirement "${req.name}".`);
+      }
+
+      if (typeof req.normalizedWeight !== 'number' || isNaN(req.normalizedWeight) || req.normalizedWeight <= 0) {
+        throw new Error(`Requirement "${req.name}" failed weight validation: normalizedWeight is missing or non-positive.`);
+      }
 
       return {
         id: `req_${index + 1}`,
@@ -24,7 +33,7 @@ export class JDNormalizer {
         category: req.category || 'TECHNICAL',
         priority,
         multiplier,
-        normalizedWeight,
+        normalizedWeight: req.normalizedWeight,
         reason: req.reason || '',
         isPrimaryTech: req.isPrimaryTech || false
       };
