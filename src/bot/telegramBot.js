@@ -200,8 +200,8 @@ export function createTelegramBot() {
           const header = Formatters.formatBatchCandidateHeader(i, analyzedCandidates.length);
           const candidateReport = Formatters.formatCandidateReport(cand, i);
 
-          // Send the header + full professional report for this candidate
-          await replySafe(ctx, header + '\n' + candidateReport, Keyboards.candidateActions(cand.candidateId));
+          // Send header + report with minimal keyboard (no ranking button — ranking comes at the end)
+          await replySafe(ctx, header + '\n' + candidateReport, Keyboards.batchCandidateActions(cand.candidateId));
 
           // Small delay between messages to avoid Telegram rate limiting
           if (i < analyzedCandidates.length - 1) {

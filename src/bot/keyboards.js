@@ -37,6 +37,18 @@ export const Keyboards = {
   },
 
   /**
+   * Minimal inline button for individual candidate during batch (no ranking button to avoid duplication)
+   */
+  batchCandidateActions(candidateId) {
+    return Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🔍 Full Details', `cand_details_${candidateId}`),
+        Markup.button.callback('🎓 Courses', `cand_courses_${candidateId}`)
+      ]
+    ]);
+  },
+
+  /**
    * Inline buttons for overall ranking view
    */
   rankingActions(candidates = []) {
