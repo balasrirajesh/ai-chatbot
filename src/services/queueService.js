@@ -2,7 +2,9 @@ import pLimit from 'p-limit';
 import { config } from '../config/index.js';
 import { ResumeAnalyzer } from './resumeAnalyzer.js';
 import { ScoringEngine } from './scoringEngine.js';
+import { GapEngine } from './gapEngine.js';
 import { CourseEngine } from './courseEngine.js';
+import { ResultService } from './resultService.js';
 
 export class QueueService {
   /**
@@ -30,7 +32,7 @@ export class QueueService {
         }
 
         try {
-          // 1. Evidence Extraction & Anti-hallucination analysis
+          // 1. Evidence Extraction, Semantic Matching & Anti-hallucination analysis
           const rawAnalysis = await ResumeAnalyzer.analyzeResumeAgainstJd(
             input.resumeText,
             frozenJdProfile,
@@ -41,15 +43,17 @@ export class QueueService {
           // 2. Deterministic Scoring
           const scoreResult = ScoringEngine.calculateScore(rawAnalysis.requirements);
 
-          // 3. Deterministic Priority-aligned Course Recommendations
+          // 3. Gap Engine Categorization
+          const gapResult = GapEngine.categorizeGaps(rawAnalysis.requirements);
+
+          // 4. Deterministic Priority-aligned Course Recommendations
           const recommendations = await CourseEngine.generateRecommendations(
             rawAnalysis.requirements,
             frozenJdProfile
           );
 
-          completedCount++;
-
-          return {
+          // 5. Result Aggregator
+          const candidateData = {
             candidateId,
             candidateName: rawAnalysis.candidateName || candidateName,
             filename: input.filename,
@@ -63,6 +67,15 @@ export class QueueService {
             preferredGaps: scoreResult.preferredGaps,
             courseRecommendations: recommendations,
             analysisError: null
+          };
+
+          const aggregatedResult = ResultService.aggregateCandidateResult(frozenJdProfile, candidateData);
+
+          completedCount++;
+
+          return {
+            ...candidateData,
+            aggregatedResult
           };
         } catch (err) {
           console.error(`[QueueService] Error processing candidate ${candidateName}:`, err);

@@ -101,8 +101,8 @@ Extract evidence for EVERY requirement from the frozen JD list against this resu
       return req;
     });
 
-    // 3. Pass through EvidenceMatcher for pure deterministic status mapping
-    const matchedRequirements = EvidenceMatcher.matchAll(frozenJdProfile.requirements, enhancedEvidences);
+    // 3. Pass through EvidenceMatcher with semantic matching
+    const matchedRequirements = await EvidenceMatcher.matchAll(frozenJdProfile.requirements, enhancedEvidences);
 
     return {
       candidateName: sanitizedAi.candidateName || candidateName || 'Candidate',

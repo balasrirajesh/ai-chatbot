@@ -1,18 +1,11 @@
+import { EmbeddingService } from './embeddingService.js';
+
 /**
  * Evidence Matcher
- * Pure, isolated service whose single responsibility is mapping:
- * JD Requirement + Extracted Resume Evidence -> Final Match Status & Score Match Value
+ * Isolated service mapping:
+ * JD Requirement + Extracted Resume Evidence + Semantic Similarity -> Final Match Status & Score Match Value
  */
 export class EvidenceMatcher {
-  /**
-   * Match Values:
-   * Strong Match: 1.0
-   * Good Match: 0.8
-   * Partial Match: 0.5
-   * Weak Match: 0.25
-   * Missing: 0.0
-   * Critical Gap: 0.0
-   */
   static MATCH_VALUES = {
     STRONG_MATCH: 1.0,
     GOOD_MATCH: 0.8,
@@ -24,24 +17,27 @@ export class EvidenceMatcher {
 
   /**
    * Determine exact match status and deterministic numerical value for a requirement
-   * @param {Object} jdRequirement - { name, priority, normalizedWeight, type }
+   * @param {Object} jdRequirement - { name, priority, normalizedWeight, type, category }
    * @param {Object} rawCandidateEvidence - { evidence, evidenceStrength, source, experienceYears }
    * @returns {Object} { name, priority, weight, evidence, evidenceStrength, matchStatus, matchValue, isCriticalGap }
    */
   static matchRequirement(jdRequirement, rawCandidateEvidence = {}) {
+    if (typeof jdRequirement.normalizedWeight !== 'number' || isNaN(jdRequirement.normalizedWeight)) {
+      throw new Error(`Invalid or missing weight for JD requirement: "${jdRequirement.name}"`);
+    }
+
     const priority = jdRequirement.priority || 'MEDIUM';
-    const weight = typeof jdRequirement.normalizedWeight === 'number' ? jdRequirement.normalizedWeight : 0.1;
+    const weight = jdRequirement.normalizedWeight;
     
     let evidence = rawCandidateEvidence.evidence || 'No evidence found in the provided resume.';
     let evidenceStrength = (rawCandidateEvidence.evidenceStrength || 'NO_EVIDENCE').toUpperCase();
 
-    // Anti-hallucination & sanitization
+    // Anti-hallucination check
     if (!evidence || /no evidence|not mentioned|no sufficient|not found/i.test(evidence)) {
       evidence = 'No evidence found in the provided resume.';
       evidenceStrength = 'NO_EVIDENCE';
     }
 
-    // Determine match status
     let matchStatus;
     const isCritical = priority === 'CRITICAL';
 
@@ -67,31 +63,54 @@ export class EvidenceMatcher {
 
     return {
       name: jdRequirement.name,
+      category: jdRequirement.category || 'TECHNICAL',
       priority,
       weight,
       evidence,
       evidenceStrength,
       matchStatus,
       matchValue,
-      isCriticalGap
+      isCriticalGap,
+      source: rawCandidateEvidence.source || null
     };
   }
 
   /**
-   * Match an entire frozen JD requirement list against raw candidate evidences
+   * Match all frozen JD requirements with semantic fallback for partial/unmatched skills
    * @param {Array} frozenRequirements 
    * @param {Array} candidateEvidences 
-   * @returns {Array} Structured requirement matches
+   * @returns {Promise<Array>} Structured requirement matches
    */
-  static matchAll(frozenRequirements, candidateEvidences = []) {
-    return frozenRequirements.map(jdReq => {
-      const matchFound = candidateEvidences.find(ce => ce.name && (
+  static async matchAll(frozenRequirements, candidateEvidences = []) {
+    const results = [];
+
+    for (const jdReq of frozenRequirements) {
+      let matchFound = candidateEvidences.find(ce => ce.name && (
         ce.name.toLowerCase() === jdReq.name.toLowerCase() ||
         ce.name.toLowerCase().includes(jdReq.name.toLowerCase()) ||
         jdReq.name.toLowerCase().includes(ce.name.toLowerCase())
       ));
 
-      return this.matchRequirement(jdReq, matchFound || {});
-    });
+      // Semantic matching integration if exact token match was missing but candidate has related experiences
+      if (!matchFound || matchFound.evidenceStrength === 'NO_EVIDENCE') {
+        for (const ce of candidateEvidences) {
+          if (ce.name && ce.evidenceStrength !== 'NO_EVIDENCE') {
+            const similarity = await EmbeddingService.computeSimilarity(jdReq.name, ce.name);
+            if (similarity >= 0.8) {
+              matchFound = {
+                ...ce,
+                evidence: `[Semantically Matched from ${ce.name}] ${ce.evidence}`,
+                evidenceStrength: ce.evidenceStrength === 'STRONG' ? 'MODERATE' : 'WEAK'
+              };
+              break;
+            }
+          }
+        }
+      }
+
+      results.push(this.matchRequirement(jdReq, matchFound || {}));
+    }
+
+    return results;
   }
 }
