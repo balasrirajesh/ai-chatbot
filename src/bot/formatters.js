@@ -55,60 +55,225 @@ export class Formatters {
   }
 
   /**
-   * Format individual Candidate summary report with source citations
+   * Generate a score bar visualization
    */
-  static formatCandidateReport(analysis) {
-    const { candidateName, overallScore, verdict, requirements, strengths, criticalGaps, importantGaps, preferredGaps } = analysis;
-
-    const critReqs = (requirements || []).filter(r => r.priority === 'CRITICAL');
-    const highReqs = (requirements || []).filter(r => r.priority === 'HIGH');
-    const prefReqs = (requirements || []).filter(r => ['PREFERRED', 'LOW', 'MEDIUM'].includes(r.priority));
-
-    const formatReqList = (list) => {
-      if (!list || list.length === 0) return '  <i>None</i>';
-      return list.map(r => {
-        let icon = '✅';
-        if (r.matchStatus === 'CRITICAL_GAP') icon = '🔴';
-        else if (r.matchStatus === 'MISSING') icon = '❌';
-        else if (r.matchStatus === 'PARTIAL_MATCH' || r.matchStatus === 'WEAK_MATCH') icon = '⚠️';
-
-        const categoryTag = r.category ? ` [${this.escapeHtml(r.category)}]` : '';
-        const nameEscaped = this.escapeHtml(r.name);
-        const strengthEscaped = this.escapeHtml(r.evidenceStrength);
-        const evidenceEscaped = this.escapeHtml(r.evidence);
-
-        return `  ${icon} <b>${nameEscaped}</b>${categoryTag} (${strengthEscaped})\n  ↳ <i>${evidenceEscaped}</i>`;
-      }).join('\n\n');
-    };
-
-    const strengthsText = (strengths || []).length > 0
-      ? strengths.map(s => `• ${this.escapeHtml(s)}`).join('\n')
-      : '• Baseline qualifications met';
-
-    let gapsText = '';
-    if (criticalGaps && criticalGaps.length > 0) {
-      gapsText += `🔴 <b>Critical:</b> ${this.escapeHtml(criticalGaps.join(', '))}\n`;
-    }
-    if (importantGaps && importantGaps.length > 0) {
-      gapsText += `🟠 <b>Important:</b> ${this.escapeHtml(importantGaps.join(', '))}\n`;
-    }
-    if (preferredGaps && preferredGaps.length > 0) {
-      gapsText += `🟡 <b>Preferred:</b> ${this.escapeHtml(preferredGaps.join(', '))}\n`;
-    }
-    if (!gapsText) gapsText = '✅ No major gaps detected!';
-
-    return `👤 <b>${this.escapeHtml(candidateName)}</b>\n\n` +
-      `🎯 <b>Overall ATS Match:</b> ${overallScore}%\n` +
-      `🏷️ <b>Verdict:</b> ${this.escapeHtml(verdict)}\n\n` +
-      `🔴 <b>CORE REQUIREMENTS</b>\n${formatReqList(critReqs)}\n\n` +
-      `🟠 <b>IMPORTANT REQUIREMENTS</b>\n${formatReqList(highReqs)}\n\n` +
-      `🟡 <b>PREFERRED / SECONDARY</b>\n${formatReqList(prefReqs)}\n\n` +
-      `💪 <b>STRENGTHS</b>\n${strengthsText}\n\n` +
-      `⚠️ <b>GAPS DETECTED</b>\n${gapsText}`;
+  static scoreBar(score) {
+    const filled = Math.round(score / 10);
+    const empty = 10 - filled;
+    return '▓'.repeat(filled) + '░'.repeat(empty);
   }
 
   /**
-   * Format course recommendations list
+   * Get verdict emoji based on verdict text
+   */
+  static verdictEmoji(verdict) {
+    if (/excellent/i.test(verdict)) return '🟢';
+    if (/strong/i.test(verdict)) return '🟢';
+    if (/good/i.test(verdict)) return '🔵';
+    if (/moderate/i.test(verdict)) return '🟡';
+    if (/weak/i.test(verdict)) return '🟠';
+    return '🔴';
+  }
+
+  /**
+   * ═══════════════════════════════════════════════════════
+   * PROFESSIONAL CANDIDATE REPORT — Full 7-Section Layout
+   * ═══════════════════════════════════════════════════════
+   *
+   * Section 1: ATS Score
+   * Section 2: Why That Score
+   * Section 3: Alignments (Matched Requirements)
+   * Section 4: Best Matches (Top Strengths)
+   * Section 5: Missing Skills & Gaps
+   * Section 6: Why These Gaps Exist
+   * Section 7: Learning Roadmap & Recommended Channels
+   */
+  static formatCandidateReport(analysis, index = null) {
+    const {
+      candidateName, overallScore, verdict, requirements,
+      strengths, criticalGaps, importantGaps, preferredGaps, mediumGaps,
+      subscores, courseRecommendations
+    } = analysis;
+
+    const candidateLabel = index !== null
+      ? `Resume ${index + 1}: ${this.escapeHtml(candidateName)}`
+      : this.escapeHtml(candidateName);
+
+    const emoji = this.verdictEmoji(verdict);
+    const bar = this.scoreBar(overallScore);
+
+    // ─── SECTION 1: ATS SCORE ─────────────────────────
+    let report = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    report += `📄 <b>RESUME ANALYSIS</b>\n`;
+    report += `👤 <b>${candidateLabel}</b>\n`;
+    report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    report += `📊 <b>ATS COMPATIBILITY SCORE</b>\n`;
+    report += `┌──────────────────────────────┐\n`;
+    report += `│  🎯  <b>${overallScore}%</b>  ${bar}  │\n`;
+    report += `│  ${emoji}  <b>${this.escapeHtml(verdict)}</b>\n`;
+    report += `└──────────────────────────────┘\n\n`;
+
+    // ─── SECTION 2: WHY THAT SCORE ────────────────────
+    report += `📋 <b>WHY THIS SCORE?</b>\n`;
+    report += `─────────────────────────\n`;
+
+    const techScore = subscores?.technicalMatch ?? overallScore;
+    const expScore = subscores?.experienceMatch ?? overallScore;
+    const critScore = subscores?.criticalRequirementsMatch ?? 100;
+
+    report += `  ⚙️ <b>Technical Skills Match:</b> ${techScore}%\n`;
+    report += `  📅 <b>Experience Match:</b> ${expScore}%\n`;
+    report += `  🔴 <b>Critical Requirements Met:</b> ${critScore}%\n\n`;
+
+    // Count matches by status
+    const strongMatches = (requirements || []).filter(r => r.matchStatus === 'STRONG_MATCH').length;
+    const partialMatches = (requirements || []).filter(r => ['PARTIAL_MATCH', 'GOOD_MATCH'].includes(r.matchStatus)).length;
+    const missingCount = (requirements || []).filter(r => ['MISSING', 'CRITICAL_GAP', 'WEAK_MATCH'].includes(r.matchStatus)).length;
+    const totalReqs = (requirements || []).length;
+
+    report += `  📈 <b>Breakdown:</b> ${strongMatches} strong, ${partialMatches} partial, ${missingCount} missing out of ${totalReqs} requirements\n`;
+
+    // Score explanation
+    if ((criticalGaps || []).length > 0) {
+      report += `  ⚠️ <i>Score is capped due to ${criticalGaps.length} critical gap(s) — core skills needed for this role are missing.</i>\n`;
+    } else if (overallScore >= 80) {
+      report += `  ✅ <i>Strong alignment with the role's core competencies. No critical gaps detected.</i>\n`;
+    } else {
+      report += `  💡 <i>Decent match but several important or preferred skills are missing or weakly evidenced.</i>\n`;
+    }
+    report += `\n`;
+
+    // ─── SECTION 3: ALIGNMENTS ────────────────────────
+    report += `✅ <b>ALIGNMENTS — What Matches the JD</b>\n`;
+    report += `─────────────────────────\n`;
+
+    const aligned = (requirements || []).filter(r => r.matchValue >= 0.5);
+    if (aligned.length > 0) {
+      for (const req of aligned) {
+        let icon = '✅';
+        if (req.matchStatus === 'PARTIAL_MATCH' || req.matchStatus === 'GOOD_MATCH') icon = '🔵';
+
+        const priorityTag = req.priority === 'CRITICAL' ? '🔴' : req.priority === 'HIGH' ? '🟠' : '🟡';
+        report += `  ${icon} <b>${this.escapeHtml(req.name)}</b> ${priorityTag}${req.priority}\n`;
+        report += `     ↳ <i>${this.escapeHtml(req.evidence)}</i>\n`;
+      }
+    } else {
+      report += `  ⚠️ <i>No strong alignments detected with JD requirements.</i>\n`;
+    }
+    report += `\n`;
+
+    // ─── SECTION 4: BEST MATCHES (TOP STRENGTHS) ──────
+    report += `💪 <b>BEST MATCHES — Top Strengths</b>\n`;
+    report += `─────────────────────────\n`;
+
+    if (strengths && strengths.length > 0) {
+      for (const s of strengths) {
+        report += `  ⭐ ${this.escapeHtml(s)}\n`;
+      }
+    } else {
+      report += `  • Baseline qualifications met\n`;
+    }
+    report += `\n`;
+
+    // ─── SECTION 5: MISSING SKILLS & GAPS ─────────────
+    report += `❌ <b>MISSING SKILLS &amp; GAPS</b>\n`;
+    report += `─────────────────────────\n`;
+
+    const hasCritGaps = criticalGaps && criticalGaps.length > 0;
+    const hasImpGaps = importantGaps && importantGaps.length > 0;
+    const hasMedGaps = mediumGaps && mediumGaps.length > 0;
+    const hasPrefGaps = preferredGaps && preferredGaps.length > 0;
+    const hasAnyGaps = hasCritGaps || hasImpGaps || hasMedGaps || hasPrefGaps;
+
+    if (hasAnyGaps) {
+      if (hasCritGaps) {
+        report += `  🔴 <b>Critical (Must-Have):</b>\n`;
+        for (const g of criticalGaps) {
+          report += `     ✖ ${this.escapeHtml(g)}\n`;
+        }
+      }
+      if (hasImpGaps) {
+        report += `  🟠 <b>Important:</b>\n`;
+        for (const g of importantGaps) {
+          report += `     ✖ ${this.escapeHtml(g)}\n`;
+        }
+      }
+      if (hasMedGaps) {
+        report += `  🟡 <b>Medium Priority:</b>\n`;
+        for (const g of mediumGaps) {
+          report += `     ✖ ${this.escapeHtml(g)}\n`;
+        }
+      }
+      if (hasPrefGaps) {
+        report += `  ⚪ <b>Nice-to-Have:</b>\n`;
+        for (const g of preferredGaps) {
+          report += `     ✖ ${this.escapeHtml(g)}\n`;
+        }
+      }
+    } else {
+      report += `  ✅ <b>No significant gaps detected!</b> Candidate meets all key requirements.\n`;
+    }
+    report += `\n`;
+
+    // ─── SECTION 6: WHY THESE GAPS EXIST ──────────────
+    report += `❓ <b>WHY THESE GAPS?</b>\n`;
+    report += `─────────────────────────\n`;
+
+    const gapRequirements = (requirements || []).filter(r =>
+      r.matchValue < 0.5 && (r.matchStatus === 'CRITICAL_GAP' || r.matchStatus === 'MISSING' || r.matchStatus === 'WEAK_MATCH')
+    );
+
+    if (gapRequirements.length > 0) {
+      for (const req of gapRequirements) {
+        const priorityTag = req.priority === 'CRITICAL' ? '🔴' : req.priority === 'HIGH' ? '🟠' : '🟡';
+        const reasonText = req.evidenceStrength === 'NO_EVIDENCE'
+          ? 'No mention of this skill found anywhere in the resume.'
+          : req.evidenceStrength === 'WEAK'
+            ? 'Only course/tutorial completion found — no professional or project-level application.'
+            : 'Insufficient evidence of hands-on, production-level experience.';
+
+        report += `  ${priorityTag} <b>${this.escapeHtml(req.name)}</b>\n`;
+        report += `     📎 <b>Evidence:</b> <i>${this.escapeHtml(req.evidence)}</i>\n`;
+        report += `     💡 <b>Reason:</b> ${reasonText}\n\n`;
+      }
+    } else {
+      report += `  ✅ No critical gaps to explain — all requirements are sufficiently matched.\n`;
+    }
+
+    // ─── SECTION 7: LEARNING ROADMAP & CHANNELS ───────
+    report += `🎓 <b>LEARNING ROADMAP — How to Become Eligible</b>\n`;
+    report += `─────────────────────────\n`;
+
+    if (courseRecommendations && courseRecommendations.length > 0) {
+      for (let i = 0; i < courseRecommendations.length; i++) {
+        const rec = courseRecommendations[i];
+        const priorityIcon = rec.priority === 'HIGH' || rec.priority === 'CRITICAL' ? '🔴' : rec.priority === 'MEDIUM' ? '🟠' : '🟡';
+
+        report += `  ${i + 1}. ${priorityIcon} <b>${this.escapeHtml(rec.topic)}</b>\n`;
+        report += `     📌 <b>Addresses:</b> ${this.escapeHtml(rec.addressesRequirement)} (${this.escapeHtml(rec.requirementPriority)} JD Requirement)\n`;
+        report += `     💡 <b>Why Needed:</b> ${this.escapeHtml(rec.reason)}\n`;
+
+        if (rec.recommendedChannels && rec.recommendedChannels.length > 0) {
+          report += `     📺 <b>Recommended Channels:</b> ${this.escapeHtml(rec.recommendedChannels.join(' • '))}\n`;
+        }
+
+        if (rec.searchUrl) {
+          report += `     🔗 <a href="${this.escapeHtml(rec.searchUrl)}">Search Tutorials on YouTube</a>\n`;
+        }
+        report += `\n`;
+      }
+    } else {
+      report += `  ✅ Fully qualified — no additional learning paths required for this role.\n\n`;
+    }
+
+    report += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+
+    return report;
+  }
+
+  /**
+   * Format course recommendations list (used by callback button)
    */
   static formatCourseRecommendations(candidateName, recommendations) {
     if (!recommendations || recommendations.length === 0) {
@@ -121,7 +286,7 @@ export class Formatters {
       else if (r.priority === 'MEDIUM') icon = '🟠';
 
       const channelsText = (r.recommendedChannels && r.recommendedChannels.length > 0)
-        ? `\n   📺 <b>Recommended Channels / Resources:</b> ${this.escapeHtml(r.recommendedChannels.join(', '))}`
+        ? `\n   📺 <b>Recommended Channels / Resources:</b> ${this.escapeHtml(r.recommendedChannels.join(' • '))}`
         : '';
 
       const searchLink = r.searchUrl
@@ -140,74 +305,70 @@ export class Formatters {
   }
 
   /**
-   * Format consolidated batch analysis results into a single clean overview report
+   * Format the batch progress header sent before each sequential candidate report
+   */
+  static formatBatchCandidateHeader(currentIndex, totalCount) {
+    return `📊 <b>BATCH ANALYSIS — Resume ${currentIndex + 1} of ${totalCount}</b>\n`;
+  }
+
+  /**
+   * Format the final comparative ranking leaderboard (sent after all individual reports)
+   */
+  static formatFinalRanking(analyzedCandidates, rankingData) {
+    if (!rankingData || !rankingData.rankings || rankingData.rankings.length === 0) {
+      return `🏆 <b>No ranking data available.</b>`;
+    }
+
+    const medalIcons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+
+    let report = `\n════════════════════════════════\n`;
+    report += `🏆 <b>FINAL COMPARATIVE RANKING</b>\n`;
+    report += `════════════════════════════════\n\n`;
+
+    for (const r of rankingData.rankings) {
+      const i = r.rank - 1;
+      const icon = medalIcons[i] || `${r.rank}️⃣`;
+      const bar = this.scoreBar(r.overallScore);
+      const critNote = r.criticalGapsCount > 0
+        ? ` ⚠️ <i>${r.criticalGapsCount} critical gap(s)</i>`
+        : ` ✅ <i>No critical gaps</i>`;
+
+      report += `${icon} <b>${this.escapeHtml(r.candidateName)}</b>\n`;
+      report += `   🎯 <b>${r.overallScore}%</b>  ${bar}\n`;
+      report += `   🏷️ ${this.escapeHtml(r.verdict)}${critNote}\n\n`;
+    }
+
+    report += `────────────────────────────────\n`;
+    report += `📊 <b>Top Candidate Rationale:</b>\n`;
+    report += `${this.escapeHtml(rankingData.topCandidateExplanation || 'Based on core priority matches and zero critical gaps.')}\n`;
+    report += `════════════════════════════════`;
+
+    return report;
+  }
+
+  /**
+   * Format rankings (used by /rankings command and callback)
+   */
+  static formatRankings(rankingData) {
+    return this.formatFinalRanking([], rankingData);
+  }
+
+  /**
+   * @deprecated — kept for backward compatibility but no longer used for batch output
    */
   static formatConsolidatedBatchReport(analyzedCandidates, rankingData) {
     if (!analyzedCandidates || analyzedCandidates.length === 0) {
       return `⚠️ No candidates analyzed.`;
     }
 
+    // For backward compat, build a simple consolidated view
     const sections = analyzedCandidates.map((cand, idx) => {
-      const { candidateName, overallScore, verdict, strengths, criticalGaps, importantGaps, preferredGaps, courseRecommendations } = cand;
-
-      const strengthsText = (strengths && strengths.length > 0)
-        ? strengths.slice(0, 3).map(s => `  • ${this.escapeHtml(s)}`).join('\n')
-        : '  • Baseline requirements met';
-
-      let gapsSummary = [];
-      if (criticalGaps && criticalGaps.length > 0) {
-        gapsSummary.push(`🔴 <b>Critical Missing:</b> ${this.escapeHtml(criticalGaps.join(', '))}`);
-      }
-      if (importantGaps && importantGaps.length > 0) {
-        gapsSummary.push(`🟠 <b>Important Missing:</b> ${this.escapeHtml(importantGaps.join(', '))}`);
-      }
-      if (preferredGaps && preferredGaps.length > 0) {
-        gapsSummary.push(`🟡 <b>Preferred Missing:</b> ${this.escapeHtml(preferredGaps.join(', '))}`);
-      }
-      const gapsText = gapsSummary.length > 0 ? gapsSummary.map(g => `  ${g}`).join('\n') : '  ✅ Meets all requirements!';
-
-      let recsText = '';
-      if (courseRecommendations && courseRecommendations.length > 0) {
-        const topRecs = courseRecommendations.slice(0, 2).map((r, rIdx) => {
-          const channels = (r.recommendedChannels && r.recommendedChannels.length > 0)
-            ? `\n     📺 <i>Channels:</i> ${this.escapeHtml(r.recommendedChannels.slice(0, 2).join(', '))}`
-            : '';
-          const searchLink = r.searchUrl
-            ? ` — <a href="${this.escapeHtml(r.searchUrl)}">YouTube Tutorials</a>`
-            : '';
-          return `  ${rIdx + 1}. <b>${this.escapeHtml(r.topic)}</b> (${this.escapeHtml(r.priority)} Priority)${searchLink}\n     ↳ <i>Why:</i> ${this.escapeHtml(r.reason)}${channels}`;
-        }).join('\n\n');
-        recsText = `\n\n🎓 <b>Recommended Learning &amp; Channels to Qualify:</b>\n${topRecs}`;
-      } else {
-        recsText = `\n\n🎓 <b>Recommended Learning:</b>\n  ✅ Fully qualified for role requirements.`;
-      }
-
-      return `👤 <b>Candidate ${idx + 1}: ${this.escapeHtml(candidateName)}</b>\n` +
-        `━━━━━━━━━━━━━━━━━━━━\n` +
-        `🎯 <b>ATS Match:</b> ${overallScore}%  |  <b>Verdict:</b> ${this.escapeHtml(verdict)}\n\n` +
-        `💪 <b>Key Strengths:</b>\n${strengthsText}\n\n` +
-        `⚠️ <b>Gaps &amp; Lacking Skills:</b>\n${gapsText}` +
-        recsText;
+      return this.formatCandidateReport(cand, idx);
     });
 
-    let header = `📊 <b>BATCH ANALYSIS RESULTS (${analyzedCandidates.length} Candidates)</b>\n\n`;
-    let body = sections.join('\n\n────────────────────\n\n');
-
-    let rankingSection = '';
-    if (rankingData && rankingData.rankings && rankingData.rankings.length > 0) {
-      const medalIcons = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-      const rankingLines = rankingData.rankings.map((r, i) => {
-        const icon = medalIcons[i] || `${i + 1}️⃣`;
-        const critNote = r.criticalGapsCount > 0 ? ` (⚠️ ${r.criticalGapsCount} critical gap)` : '';
-        return `${icon} <b>${this.escapeHtml(r.candidateName)}</b> — <b>${r.overallScore}%</b> [${this.escapeHtml(r.verdict)}]${critNote}`;
-      }).join('\n');
-
-      rankingSection = `\n\n════════════════════\n` +
-        `🏆 <b>COMPARATIVE RANKING</b>\n\n` +
-        `${rankingLines}\n\n` +
-        `📊 <b>Top Candidate Rationale:</b>\n${this.escapeHtml(rankingData.topCandidateExplanation || 'Based on core priority matches and zero critical gaps.')}`;
-    }
-
-    return header + body + rankingSection;
+    let result = `📊 <b>BATCH ANALYSIS RESULTS (${analyzedCandidates.length} Candidates)</b>\n\n`;
+    result += sections.join('\n\n');
+    result += '\n\n' + this.formatFinalRanking(analyzedCandidates, rankingData);
+    return result;
   }
 }

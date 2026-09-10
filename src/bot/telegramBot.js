@@ -162,7 +162,7 @@ export function createTelegramBot() {
     const candidateInputs = [...queueData.files];
     uploadQueues.delete(sessionId);
 
-    let statusMsgId = await updateStatus(ctx, null, `📄 *Processing batch of ${candidateInputs.length} resumes...*`);
+    let statusMsgId = await updateStatus(ctx, null, `📄 <b>Processing batch of ${candidateInputs.length} resume(s)...</b>`);
 
     try {
       await SessionService.updateSession(sessionId, { state: 'ANALYZING_RESUMES' });
@@ -171,7 +171,7 @@ export function createTelegramBot() {
         candidateInputs,
         session.jobDescription,
         async (done, total, name) => {
-          await updateStatus(ctx, statusMsgId, `🔍 *Analyzing Candidate ${done} of ${total} (${name})...*`);
+          await updateStatus(ctx, statusMsgId, `🔍 <b>Analyzing Resume ${done} of ${total}</b> — ${Formatters.escapeHtml(name)}...`);
         }
       );
 
@@ -183,19 +183,36 @@ export function createTelegramBot() {
       }
 
       await SessionService.updateSession(sessionId, { state: 'RESULT_READY' });
-      await updateStatus(ctx, statusMsgId, `✅ *Batch Analysis Complete!*`);
+      await updateStatus(ctx, statusMsgId, `✅ <b>Analysis Complete!</b> Delivering reports...`);
 
       const allCandidates = await SessionService.getSessionCandidates(sessionId);
       const rankingData = RankingEngine.rankCandidates(allCandidates, session.jobDescription);
 
       if (analyzedCandidates.length === 1) {
-        // Single resume upload: deliver full single report with direct action buttons
+        // Single resume: deliver full professional report with action buttons
         const cand = analyzedCandidates[0];
         await replySafe(ctx, Formatters.formatCandidateReport(cand), Keyboards.candidateActions(cand.candidateId));
       } else {
-        // Multi-resume batch upload: deliver ONE consolidated batch overview message with candidate detail buttons
-        const consolidatedReport = Formatters.formatConsolidatedBatchReport(analyzedCandidates, rankingData);
-        await replySafe(ctx, consolidatedReport, Keyboards.batchActions(analyzedCandidates));
+        // Multi-resume batch: send each candidate's full report SEQUENTIALLY
+        // Resume 1 complete → Resume 2 complete → ... → Final Ranking
+        for (let i = 0; i < analyzedCandidates.length; i++) {
+          const cand = analyzedCandidates[i];
+          const header = Formatters.formatBatchCandidateHeader(i, analyzedCandidates.length);
+          const candidateReport = Formatters.formatCandidateReport(cand, i);
+
+          // Send the header + full professional report for this candidate
+          await replySafe(ctx, header + '\n' + candidateReport, Keyboards.candidateActions(cand.candidateId));
+
+          // Small delay between messages to avoid Telegram rate limiting
+          if (i < analyzedCandidates.length - 1) {
+            await new Promise(r => setTimeout(r, 800));
+          }
+        }
+
+        // After all individual reports, send the final comparative ranking leaderboard
+        await new Promise(r => setTimeout(r, 500));
+        const rankingReport = Formatters.formatFinalRanking(analyzedCandidates, rankingData);
+        await replySafe(ctx, rankingReport, Keyboards.batchActions(analyzedCandidates));
       }
     } catch (err) {
       await handleGlobalError(ctx, err, 'Resume Processing');
