@@ -1,0 +1,28 @@
+{
+  "name": "hashira-resume-bot",
+  "version": "1.0.0",
+  "description": "AI-Powered Resume-Job Description Matching Telegram Bot",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test tests/**/*.test.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mammoth": "^1.9.0",
+    "mongoose": "^8.9.5",
+    "openai": "^4.83.0",
+    "p-limit": "^6.2.0",
+    "pdf-parse": "^1.1.1",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
