@@ -2,7 +2,6 @@ import pLimit from 'p-limit';
 import { config } from '../config/index.js';
 import { ResumeAnalyzer } from './resumeAnalyzer.js';
 import { ScoringEngine } from './scoringEngine.js';
-import { GapEngine } from './gapEngine.js';
 import { CourseEngine } from './courseEngine.js';
 import { ResultService } from './resultService.js';
 
@@ -43,57 +42,53 @@ export class QueueService {
           // 2. Deterministic Scoring
           const scoreResult = ScoringEngine.calculateScore(rawAnalysis.requirements);
 
-          // 3. Gap Engine Categorization
-          const gapResult = GapEngine.categorizeGaps(rawAnalysis.requirements);
-
-          // 4. Deterministic Priority-aligned Course Recommendations
+          // 3. Deterministic Priority-aligned Course Recommendations (using GapEngine)
           const recommendations = await CourseEngine.generateRecommendations(
             rawAnalysis.requirements,
             frozenJdProfile
           );
 
-          // 5. Result Aggregator
+          // 4. Authoritative Result Aggregator
           const candidateData = {
             candidateId,
             candidateName: rawAnalysis.candidateName || candidateName,
             filename: input.filename,
-            rawResumeText: input.resumeText,
-            overallScore: scoreResult.overallScore,
-            verdict: scoreResult.verdict,
             requirements: rawAnalysis.requirements,
-            strengths: rawAnalysis.strengths,
-            criticalGaps: scoreResult.criticalGaps,
-            importantGaps: scoreResult.importantGaps,
-            preferredGaps: scoreResult.preferredGaps,
-            courseRecommendations: recommendations,
-            analysisError: null
+            strengths: rawAnalysis.strengths
           };
 
-          const aggregatedResult = ResultService.aggregateCandidateResult(frozenJdProfile, candidateData);
+          const finalResult = ResultService.aggregateCandidateResult(
+            frozenJdProfile,
+            candidateData,
+            scoreResult,
+            recommendations
+          );
 
           completedCount++;
 
           return {
-            ...candidateData,
-            aggregatedResult
+            ...finalResult,
+            analysisError: null
           };
         } catch (err) {
           console.error(`[QueueService] Error processing candidate ${candidateName}:`, err);
           completedCount++;
 
-          // Isolated error result - one failure does not break the entire batch!
+          // Isolated error result
           return {
             candidateId,
             candidateName,
             filename: input.filename,
-            rawResumeText: input.resumeText,
             overallScore: 0,
             verdict: 'Poor Match',
+            subscores: { technicalMatch: 0, experienceMatch: 0, criticalRequirementsMatch: 0 },
             requirements: [],
             strengths: [],
             criticalGaps: ['Analysis Error'],
             importantGaps: [],
+            mediumGaps: [],
             preferredGaps: [],
+            gaps: { critical: ['Analysis Error'], important: [], medium: [], preferred: [] },
             courseRecommendations: [],
             analysisError: err.message || 'Failed to analyze candidate resume'
           };

@@ -2,22 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
+import { TextNormalizer } from './textNormalizer.js';
 
 export class DocumentParser {
-  /**
-   * Cleans and normalizes extracted text
-   */
-  static cleanText(text) {
-    if (!text || typeof text !== 'string') return '';
-    return text
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n')
-      .replace(/\t/g, ' ')
-      .replace(/[ \t]{2,}/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
   /**
    * Parse PDF buffer or file path
    */
@@ -32,7 +19,7 @@ export class DocumentParser {
     }
 
     const data = await pdfParse(buffer);
-    const cleaned = this.cleanText(data.text);
+    const cleaned = TextNormalizer.normalize(data.text);
     if (!cleaned || cleaned.length < 20) {
       throw new Error('PDF document contained insufficient or unextractable text.');
     }
@@ -53,7 +40,7 @@ export class DocumentParser {
     }
 
     const result = await mammoth.extractRawText({ buffer });
-    const cleaned = this.cleanText(result.value);
+    const cleaned = TextNormalizer.normalize(result.value);
     if (!cleaned || cleaned.length < 20) {
       throw new Error('DOCX document contained insufficient or unextractable text.');
     }
@@ -61,7 +48,7 @@ export class DocumentParser {
   }
 
   /**
-   * Generic extractor based on file extension / mime type
+   * Generic extractor based on file extension
    */
   static async parseDocument(filePath, originalFilename = '') {
     const ext = (path.extname(originalFilename || filePath) || '').toLowerCase();
@@ -72,7 +59,7 @@ export class DocumentParser {
       return await this.parseDOCX(filePath);
     } else if (ext === '.txt') {
       const content = await fs.readFile(filePath, 'utf-8');
-      return this.cleanText(content);
+      return TextNormalizer.normalize(content);
     } else {
       throw new Error(`Unsupported document format: ${ext || 'unknown'}. Please upload PDF or DOCX.`);
     }
@@ -87,7 +74,7 @@ export class DocumentParser {
         await fs.unlink(filePath);
       }
     } catch (err) {
-      // Ignore cleanup errors (e.g. file already gone)
+      // Ignore cleanup errors
     }
   }
 }

@@ -1,10 +1,10 @@
-
 import { aiService } from './aiService.js';
+import { GapEngine } from './gapEngine.js';
 
 export class CourseEngine {
   /**
    * Deterministically order course recommendations strictly aligned with JD priorities,
-   * then optionally enrich with AI explanations.
+   * sourcing gaps directly from the authoritative GapEngine.
    * 
    * @param {Array} requirementMatches - Requirements from the candidate analysis
    * @param {Object} jdProfile - Frozen JD profile
@@ -13,51 +13,35 @@ export class CourseEngine {
   static async generateRecommendations(requirementMatches, jdProfile) {
     if (!Array.isArray(requirementMatches)) return [];
 
-    // Filter gaps (where candidate matchValue is less than 0.8 / not strong)
-    const gapRequirements = requirementMatches.filter(req => req.matchValue < 0.8);
+    // Authoritative gap extraction via GapEngine
+    const { criticalGaps, importantGaps, mediumGaps, preferredGaps } = GapEngine.categorizeGaps(requirementMatches);
 
-    if (gapRequirements.length === 0) {
+    // Deterministic priority ordering:
+    // 1. Critical gaps (HIGH course priority)
+    // 2. Important gaps (MEDIUM course priority)
+    // 3. Medium gaps (MEDIUM/LOW course priority)
+    // 4. Preferred gaps (LOW course priority)
+    const sortedGaps = [
+      ...criticalGaps.map(g => ({ ...g, coursePriority: 'HIGH' })),
+      ...importantGaps.map(g => ({ ...g, coursePriority: 'MEDIUM' })),
+      ...mediumGaps.map(g => ({ ...g, coursePriority: 'MEDIUM' })),
+      ...preferredGaps.map(g => ({ ...g, coursePriority: 'LOW' }))
+    ];
+
+    if (sortedGaps.length === 0) {
       return [];
     }
 
-    // Deterministic priority mapping:
-    // Gap on CRITICAL req -> Course Priority = HIGH (or CRITICAL)
-    // Gap on HIGH req -> Course Priority = MEDIUM / HIGH
-    // Gap on MEDIUM req -> Course Priority = MEDIUM
-    // Gap on LOW/PREFERRED req -> Course Priority = LOW
-    const priorityOrder = {
-      CRITICAL: 1,
-      HIGH: 2,
-      MEDIUM: 3,
-      LOW: 4,
-      PREFERRED: 5
-    };
-
-    // Sort gaps deterministically by priority: Critical gaps ALWAYS first
-    const sortedGaps = [...gapRequirements].sort((a, b) => {
-      const pA = priorityOrder[a.priority] || 99;
-      const pB = priorityOrder[b.priority] || 99;
-      if (pA !== pB) return pA - pB;
-      return (b.weight || 0) - (a.weight || 0); // secondary sort by weight
-    });
-
     // Create deterministic structured course blueprints
-    const courseBlueprints = sortedGaps.map(gap => {
-      let recPriority;
-      if (gap.priority === 'CRITICAL') recPriority = 'HIGH';
-      else if (gap.priority === 'HIGH') recPriority = 'MEDIUM';
-      else recPriority = 'LOW';
+    const courseBlueprints = sortedGaps.map(gap => ({
+      topic: `${gap.name} Comprehensive Training`,
+      priority: gap.coursePriority,
+      addressesRequirement: gap.name,
+      requirementPriority: gap.priority,
+      reason: `${gap.name} is a ${gap.priority.toLowerCase()} requirement for this role and sufficient evidence was not found in the candidate's resume.`
+    }));
 
-      return {
-        topic: `${gap.name} Comprehensive Training`,
-        priority: recPriority,
-        addressesRequirement: gap.name,
-        requirementPriority: gap.priority,
-        reason: `${gap.name} is a ${gap.priority.toLowerCase()} requirement for this role and sufficient evidence was not found in the candidate's resume.`
-      };
-    });
-
-    // Attempt AI enrichment for realistic course names and tailored rationale while keeping deterministic order
+    // AI enrichment for realistic course names and tailored rationale while keeping deterministic order
     try {
       const prompt = `Here are identified skill gaps for a candidate for the role "${jdProfile?.jobTitle || 'Developer'}":
 ${JSON.stringify(courseBlueprints.map(c => ({ requirement: c.addressesRequirement, jdPriority: c.requirementPriority, recommendationPriority: c.priority })), null, 2)}
@@ -80,7 +64,6 @@ Output schema:
 
       const aiResponse = await aiService.generateJSON(prompt, 'You are a technical career advisor. Output only valid JSON.');
       if (aiResponse && Array.isArray(aiResponse.recommendations) && aiResponse.recommendations.length > 0) {
-        // Overlay AI details onto deterministic priority structure
         return courseBlueprints.map((blueprint, i) => {
           const aiItem = aiResponse.recommendations.find(r => r.addressesRequirement?.toLowerCase() === blueprint.addressesRequirement.toLowerCase()) || aiResponse.recommendations[i];
           return {
@@ -93,7 +76,7 @@ Output schema:
         });
       }
     } catch (err) {
-      // Fallback cleanly to deterministic blueprints if AI call fails
+      // Fallback cleanly to deterministic blueprints
     }
 
     return courseBlueprints;

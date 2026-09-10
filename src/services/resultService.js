@@ -2,35 +2,40 @@ import { GapEngine } from './gapEngine.js';
 
 export class ResultService {
   /**
-   * Aggregate complete candidate evaluation into structured result package
+   * Aggregate complete candidate evaluation into canonical, authoritative result package
    * @param {Object} jdProfile 
-   * @param {Object} candidateAnalysis 
-   * @returns {Object} Canonical structured candidate result
+   * @param {Object} rawAnalysis - { candidateId, candidateName, filename, requirements, strengths }
+   * @param {Object} scoreResult - { overallScore, verdict, subscores }
+   * @param {Array} courseRecommendations - Prioritized learning paths
+   * @returns {Object} Authoritative single source of truth candidate result
    */
-  static aggregateCandidateResult(jdProfile, candidateAnalysis) {
-    const gaps = GapEngine.categorizeGaps(candidateAnalysis.requirements || []);
+  static aggregateCandidateResult(jdProfile, rawAnalysis, scoreResult, courseRecommendations) {
+    const gaps = GapEngine.categorizeGaps(rawAnalysis.requirements || []);
 
     return {
-      candidateId: candidateAnalysis.candidateId,
-      candidateName: candidateAnalysis.candidateName,
-      filename: candidateAnalysis.filename,
-      overallScore: candidateAnalysis.overallScore,
-      verdict: candidateAnalysis.verdict,
-      criticalGapsCount: gaps.criticalGaps.length,
+      candidateId: rawAnalysis.candidateId,
+      candidateName: rawAnalysis.candidateName,
+      filename: rawAnalysis.filename,
+      overallScore: scoreResult.overallScore,
+      verdict: scoreResult.verdict,
       subscores: {
-        skillsMatch: Math.round(candidateAnalysis.overallScore),
-        experienceMatch: candidateAnalysis.requirements.some(r => r.category === 'EXPERIENCE' && r.matchValue >= 0.8) ? 90 : 60,
-        atsFormatting: 90
+        technicalMatch: scoreResult.subscores?.technicalMatch ?? scoreResult.overallScore,
+        experienceMatch: scoreResult.subscores?.experienceMatch ?? scoreResult.overallScore,
+        criticalRequirementsMatch: scoreResult.subscores?.criticalRequirementsMatch ?? 100
       },
-      requirements: candidateAnalysis.requirements,
-      strengths: candidateAnalysis.strengths || [],
+      requirements: rawAnalysis.requirements,
+      strengths: rawAnalysis.strengths || [],
+      criticalGaps: gaps.criticalGaps.map(g => g.name),
+      importantGaps: gaps.importantGaps.map(g => g.name),
+      mediumGaps: gaps.mediumGaps.map(g => g.name),
+      preferredGaps: gaps.preferredGaps.map(g => g.name),
       gaps: {
         critical: gaps.criticalGaps.map(g => g.name),
         important: gaps.importantGaps.map(g => g.name),
         medium: gaps.mediumGaps.map(g => g.name),
         preferred: gaps.preferredGaps.map(g => g.name)
       },
-      courseRecommendations: candidateAnalysis.courseRecommendations || [],
+      courseRecommendations: courseRecommendations || [],
       analyzedAt: new Date().toISOString()
     };
   }

@@ -1,6 +1,3 @@
-/**
- * Helper to escape regex special characters
- */
 function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -11,14 +8,6 @@ function escapeRegExp(string) {
  * and AI-extracted requirement priorities, applying dynamic relative multipliers.
  */
 export class JDValidator {
-  /**
-   * Relative Priority Multipliers:
-   * CRITICAL  -> 5.0
-   * HIGH      -> 3.0
-   * MEDIUM    -> 1.5
-   * PREFERRED -> 0.5
-   * LOW       -> 0.5
-   */
   static PRIORITY_MULTIPLIERS = {
     CRITICAL: 5.0,
     HIGH: 3.0,
@@ -28,10 +17,10 @@ export class JDValidator {
   };
 
   /**
-   * Validate and enforce correct prioritization and relative weight normalization
+   * Validate and enforce correct prioritization, preserve categories, and calculate relative weights
    * @param {string} rawJdText 
    * @param {object} parsedJdProfile 
-   * @returns {object} Validated and normalized JD Profile
+   * @returns {object} Validated JD Profile
    */
   static validateAndNormalize(rawJdText, parsedJdProfile) {
     if (!parsedJdProfile || typeof parsedJdProfile !== 'object') {
@@ -49,7 +38,6 @@ export class JDValidator {
     const primaryTechs = [];
     const lowerTitle = (parsedJdProfile.jobTitle || '').toLowerCase();
 
-    // Check title cues: e.g. "Java Developer" -> Java, "Python Engineer" -> Python
     const commonTechs = ['java', 'python', 'javascript', 'typescript', 'c#', 'c++', 'golang', 'go', 'ruby', 'php', 'rust', 'react', 'angular', 'vue', 'node.js', 'spring boot', 'django', 'fastapi', '.net'];
     
     for (const tech of commonTechs) {
@@ -67,11 +55,10 @@ export class JDValidator {
       }
     }
 
-    // Process each requirement, sanitize priority, and cross-check with raw text
     const sanitizedRequirements = requirements.map((req, index) => {
       let name = (req.name || `Requirement ${index + 1}`).trim();
       let priority = (req.priority || 'MEDIUM').toUpperCase();
-      let type = (req.type || 'skill').toLowerCase();
+      let category = (req.category || 'TECHNICAL').toUpperCase();
       let reason = req.reason || '';
       const nameLower = name.toLowerCase();
 
@@ -111,7 +98,7 @@ export class JDValidator {
 
       return {
         name,
-        type,
+        category,
         priority,
         isPrimaryTech: isPrimary,
         reason
@@ -124,19 +111,17 @@ export class JDValidator {
       sanitizedRequirements[0].priority = 'CRITICAL';
     }
 
-    // Dynamic Multiplier-based Weight Normalization:
-    // weight_i = multiplier_i / sum(all_multipliers)
     const totalMultiplier = sanitizedRequirements.reduce(
       (sum, req) => sum + (this.PRIORITY_MULTIPLIERS[req.priority] || 1.5),
       0
     );
 
     const weightedRequirements = sanitizedRequirements.map(req => {
-      const mult = this.PRIORITY_MULTIPLIERS[req.priority] || 1.5;
+      const multiplier = this.PRIORITY_MULTIPLIERS[req.priority] || 1.5;
       return {
         ...req,
-        multiplier: mult,
-        normalizedWeight: Number((mult / totalMultiplier).toFixed(4))
+        multiplier,
+        normalizedWeight: Number(((multiplier / totalMultiplier) * 100).toFixed(2)) // percentage 0 - 100
       };
     });
 
@@ -146,8 +131,7 @@ export class JDValidator {
       summary: parsedJdProfile.summary || '',
       primaryTechnologies: primaryTechs.length > 0 ? primaryTechs : (parsedJdProfile.primaryTechnologies || []),
       experienceYearsRequired: Number(parsedJdProfile.experienceYearsRequired || 0),
-      requirements: weightedRequirements,
-      frozenAt: new Date()
+      requirements: weightedRequirements
     };
   }
 }

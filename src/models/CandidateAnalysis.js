@@ -1,9 +1,12 @@
 import mongoose from 'mongoose';
 
 const RequirementMatchSchema = new mongoose.Schema({
+  id: { type: String },
   name: { type: String, required: true },
+  category: { type: String, default: 'TECHNICAL' },
   priority: { type: String, required: true },
-  weight: { type: Number, required: true },
+  multiplier: { type: Number },
+  normalizedWeight: { type: Number, required: true },
   evidence: { type: String, required: true },
   evidenceStrength: { 
     type: String, 
@@ -15,7 +18,12 @@ const RequirementMatchSchema = new mongoose.Schema({
     enum: ['STRONG_MATCH', 'GOOD_MATCH', 'PARTIAL_MATCH', 'WEAK_MATCH', 'MISSING', 'CRITICAL_GAP'],
     required: true 
   },
-  matchValue: { type: Number, required: true } // 1.0, 0.8, 0.5, 0.25, 0.0
+  matchValue: { type: Number, required: true },
+  isCriticalGap: { type: Boolean, default: false },
+  source: {
+    section: { type: String },
+    text: { type: String }
+  }
 }, { _id: false });
 
 const CourseRecommendationSchema = new mongoose.Schema({
@@ -35,18 +43,25 @@ const CandidateAnalysisSchema = new mongoose.Schema({
   candidateId: { type: String, required: true },
   candidateName: { type: String, default: 'Candidate' },
   filename: { type: String },
-  rawResumeText: { type: String },
-  overallScore: { type: Number, required: true }, // 0 to 100
+  overallScore: { type: Number, required: true },
   verdict: { 
     type: String, 
     enum: ['Excellent Match', 'Strong Match', 'Good Match', 'Moderate Match', 'Weak Match', 'Poor Match'],
     required: true 
   },
+  subscores: {
+    technicalMatch: { type: Number, default: 0 },
+    experienceMatch: { type: Number, default: 0 },
+    criticalRequirementsMatch: { type: Number, default: 0 }
+  },
   requirements: [RequirementMatchSchema],
   strengths: [String],
-  criticalGaps: [String],
-  importantGaps: [String],
-  preferredGaps: [String],
+  gaps: {
+    critical: [String],
+    important: [String],
+    medium: [String],
+    preferred: [String]
+  },
   courseRecommendations: [CourseRecommendationSchema],
   analysisError: { type: String, default: null }
 }, { timestamps: true });

@@ -14,9 +14,9 @@ export class JDNormalizer {
     const requirements = (validatedProfile.requirements || []).map((req, index) => {
       const priority = req.priority || 'MEDIUM';
       const multiplier = req.multiplier || JDValidator.PRIORITY_MULTIPLIERS[priority] || 1.5;
-      const weight = typeof req.normalizedWeight === 'number' 
+      const normalizedWeight = typeof req.normalizedWeight === 'number' 
         ? req.normalizedWeight 
-        : (typeof req.weight === 'number' ? req.weight : 0.1);
+        : (typeof req.weight === 'number' ? req.weight : 10.0);
 
       return {
         id: `req_${index + 1}`,
@@ -24,8 +24,7 @@ export class JDNormalizer {
         category: req.category || 'TECHNICAL',
         priority,
         multiplier,
-        weight,
-        normalizedWeight: weight,
+        normalizedWeight,
         reason: req.reason || '',
         isPrimaryTech: req.isPrimaryTech || false
       };

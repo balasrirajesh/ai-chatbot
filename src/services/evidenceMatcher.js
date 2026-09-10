@@ -2,8 +2,7 @@ import { EmbeddingService } from './embeddingService.js';
 
 /**
  * Evidence Matcher
- * Isolated service mapping:
- * JD Requirement + Extracted Resume Evidence + Semantic Similarity -> Final Match Status & Score Match Value
+ * Maps: JD Requirement + Extracted Resume Evidence -> Deterministic Match Status & Value
  */
 export class EvidenceMatcher {
   static MATCH_VALUES = {
@@ -17,17 +16,17 @@ export class EvidenceMatcher {
 
   /**
    * Determine exact match status and deterministic numerical value for a requirement
-   * @param {Object} jdRequirement - { name, priority, normalizedWeight, type, category }
-   * @param {Object} rawCandidateEvidence - { evidence, evidenceStrength, source, experienceYears }
-   * @returns {Object} { name, priority, weight, evidence, evidenceStrength, matchStatus, matchValue, isCriticalGap }
+   * @param {Object} jdRequirement - Canonical requirement: { id, name, category, priority, normalizedWeight, multiplier, isPrimaryTech }
+   * @param {Object} rawCandidateEvidence - { evidence, evidenceStrength, source }
+   * @returns {Object} Canonical matched requirement result
    */
   static matchRequirement(jdRequirement, rawCandidateEvidence = {}) {
     if (typeof jdRequirement.normalizedWeight !== 'number' || isNaN(jdRequirement.normalizedWeight)) {
-      throw new Error(`Invalid or missing weight for JD requirement: "${jdRequirement.name}"`);
+      throw new Error(`Invalid or missing normalizedWeight for JD requirement: "${jdRequirement.name}"`);
     }
 
     const priority = jdRequirement.priority || 'MEDIUM';
-    const weight = jdRequirement.normalizedWeight;
+    const normalizedWeight = jdRequirement.normalizedWeight;
     
     let evidence = rawCandidateEvidence.evidence || 'No evidence found in the provided resume.';
     let evidenceStrength = (rawCandidateEvidence.evidenceStrength || 'NO_EVIDENCE').toUpperCase();
@@ -62,10 +61,12 @@ export class EvidenceMatcher {
     const isCriticalGap = matchStatus === 'CRITICAL_GAP' || (isCritical && matchValue < 0.5);
 
     return {
+      id: jdRequirement.id,
       name: jdRequirement.name,
       category: jdRequirement.category || 'TECHNICAL',
       priority,
-      weight,
+      multiplier: jdRequirement.multiplier,
+      normalizedWeight,
       evidence,
       evidenceStrength,
       matchStatus,
@@ -76,10 +77,7 @@ export class EvidenceMatcher {
   }
 
   /**
-   * Match all frozen JD requirements with semantic fallback for partial/unmatched skills
-   * @param {Array} frozenRequirements 
-   * @param {Array} candidateEvidences 
-   * @returns {Promise<Array>} Structured requirement matches
+   * Match all frozen JD requirements with semantic fallback
    */
   static async matchAll(frozenRequirements, candidateEvidences = []) {
     const results = [];
@@ -91,7 +89,6 @@ export class EvidenceMatcher {
         jdReq.name.toLowerCase().includes(ce.name.toLowerCase())
       ));
 
-      // Semantic matching integration if exact token match was missing but candidate has related experiences
       if (!matchFound || matchFound.evidenceStrength === 'NO_EVIDENCE') {
         for (const ce of candidateEvidences) {
           if (ce.name && ce.evidenceStrength !== 'NO_EVIDENCE') {
