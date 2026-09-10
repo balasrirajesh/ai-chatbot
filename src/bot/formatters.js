@@ -148,29 +148,46 @@ export class Formatters {
     }
 
     const sections = analyzedCandidates.map((cand, idx) => {
-      const { candidateName, overallScore, verdict, strengths, criticalGaps, importantGaps, preferredGaps } = cand;
+      const { candidateName, overallScore, verdict, strengths, criticalGaps, importantGaps, preferredGaps, courseRecommendations } = cand;
 
       const strengthsText = (strengths && strengths.length > 0)
-        ? strengths.slice(0, 4).map(s => `  • ${this.escapeHtml(s)}`).join('\n')
+        ? strengths.slice(0, 3).map(s => `  • ${this.escapeHtml(s)}`).join('\n')
         : '  • Baseline requirements met';
 
       let gapsSummary = [];
       if (criticalGaps && criticalGaps.length > 0) {
-        gapsSummary.push(`🔴 <b>Critical:</b> ${this.escapeHtml(criticalGaps.join(', '))}`);
+        gapsSummary.push(`🔴 <b>Critical Missing:</b> ${this.escapeHtml(criticalGaps.join(', '))}`);
       }
       if (importantGaps && importantGaps.length > 0) {
-        gapsSummary.push(`🟠 <b>Important:</b> ${this.escapeHtml(importantGaps.join(', '))}`);
+        gapsSummary.push(`🟠 <b>Important Missing:</b> ${this.escapeHtml(importantGaps.join(', '))}`);
       }
       if (preferredGaps && preferredGaps.length > 0) {
-        gapsSummary.push(`🟡 <b>Preferred:</b> ${this.escapeHtml(preferredGaps.join(', '))}`);
+        gapsSummary.push(`🟡 <b>Preferred Missing:</b> ${this.escapeHtml(preferredGaps.join(', '))}`);
       }
-      const gapsText = gapsSummary.length > 0 ? gapsSummary.map(g => `  ${g}`).join('\n') : '  ✅ No major gaps';
+      const gapsText = gapsSummary.length > 0 ? gapsSummary.map(g => `  ${g}`).join('\n') : '  ✅ Meets all requirements!';
+
+      let recsText = '';
+      if (courseRecommendations && courseRecommendations.length > 0) {
+        const topRecs = courseRecommendations.slice(0, 2).map((r, rIdx) => {
+          const channels = (r.recommendedChannels && r.recommendedChannels.length > 0)
+            ? `\n     📺 <i>Channels:</i> ${this.escapeHtml(r.recommendedChannels.slice(0, 2).join(', '))}`
+            : '';
+          const searchLink = r.searchUrl
+            ? ` — <a href="${this.escapeHtml(r.searchUrl)}">YouTube Tutorials</a>`
+            : '';
+          return `  ${rIdx + 1}. <b>${this.escapeHtml(r.topic)}</b> (${this.escapeHtml(r.priority)} Priority)${searchLink}\n     ↳ <i>Why:</i> ${this.escapeHtml(r.reason)}${channels}`;
+        }).join('\n\n');
+        recsText = `\n\n🎓 <b>Recommended Learning &amp; Channels to Qualify:</b>\n${topRecs}`;
+      } else {
+        recsText = `\n\n🎓 <b>Recommended Learning:</b>\n  ✅ Fully qualified for role requirements.`;
+      }
 
       return `👤 <b>Candidate ${idx + 1}: ${this.escapeHtml(candidateName)}</b>\n` +
         `━━━━━━━━━━━━━━━━━━━━\n` +
         `🎯 <b>ATS Match:</b> ${overallScore}%  |  <b>Verdict:</b> ${this.escapeHtml(verdict)}\n\n` +
         `💪 <b>Key Strengths:</b>\n${strengthsText}\n\n` +
-        `⚠️ <b>Gaps &amp; Lacking Skills:</b>\n${gapsText}`;
+        `⚠️ <b>Gaps &amp; Lacking Skills:</b>\n${gapsText}` +
+        recsText;
     });
 
     let header = `📊 <b>BATCH ANALYSIS RESULTS (${analyzedCandidates.length} Candidates)</b>\n\n`;

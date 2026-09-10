@@ -37,15 +37,13 @@ export class CourseEngine {
       const sanitizedName = gap.name.replace(/[^\w\s+#.-]/gi, '').trim();
       const encodedQuery = encodeURIComponent(`${sanitizedName} tutorial for developers`);
       return {
-        topic: `${gap.name} Mastery & Application`,
+        topic: `${gap.name} Mastery & Practical Application`,
         priority: gap.coursePriority,
         addressesRequirement: gap.name,
         requirementPriority: gap.priority,
         reason: `${gap.name} is a ${gap.priority.toLowerCase()} requirement for this role and sufficient evidence was not found in the candidate's resume.`,
-        resources: [
-          `📺 [YouTube Search: ${sanitizedName} Full Course](https://www.youtube.com/results?search_query=${encodedQuery})`,
-          `📖 Official Docs & Guides for ${sanitizedName}`
-        ]
+        recommendedChannels: ['freeCodeCamp', 'Traversy Media', 'TechWorld with Nana', 'Official Docs'],
+        searchUrl: `https://www.youtube.com/results?search_query=${encodedQuery}`
       };
     });
 
