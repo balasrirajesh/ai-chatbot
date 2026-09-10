@@ -183,10 +183,7 @@ export function createTelegramBot() {
       }
 
       await SessionService.updateSession(sessionId, { state: 'RESULT_READY' });
-      await updateStatus(ctx, statusMsgId, `✅ <b>Analysis Complete!</b> Delivering reports...`);
-
-      const allCandidates = await SessionService.getSessionCandidates(sessionId);
-      const rankingData = RankingEngine.rankCandidates(allCandidates, session.jobDescription);
+      const rankingData = RankingEngine.rankCandidates(analyzedCandidates, session.jobDescription);
 
       if (analyzedCandidates.length === 1) {
         // Single resume: deliver full professional report with action buttons
@@ -194,25 +191,40 @@ export function createTelegramBot() {
         await replySafe(ctx, Formatters.formatCandidateReport(cand), Keyboards.candidateActions(cand.candidateId));
       } else {
         // Multi-resume batch: send each candidate's full report SEQUENTIALLY
-        // Resume 1 complete → Resume 2 complete → ... → Final Ranking
+        console.log(`[Batch] Delivering ${analyzedCandidates.length} individual reports...`);
+
         for (let i = 0; i < analyzedCandidates.length; i++) {
           const cand = analyzedCandidates[i];
-          const header = Formatters.formatBatchCandidateHeader(i, analyzedCandidates.length);
-          const candidateReport = Formatters.formatCandidateReport(cand, i);
+          console.log(`[Batch] Sending report ${i + 1}/${analyzedCandidates.length}: ${cand.candidateName}`);
 
-          // Send header + report with minimal keyboard (no ranking button — ranking comes at the end)
-          await replySafe(ctx, header + '\n' + candidateReport, Keyboards.batchCandidateActions(cand.candidateId));
+          try {
+            const header = Formatters.formatBatchCandidateHeader(i, analyzedCandidates.length);
+            const candidateReport = Formatters.formatCandidateReport(cand, i);
+            await replySafe(ctx, header + '\n' + candidateReport, Keyboards.batchCandidateActions(cand.candidateId));
+            console.log(`[Batch] ✅ Report ${i + 1} sent`);
+          } catch (reportErr) {
+            console.error(`[Batch] ❌ Report ${i + 1} failed:`, reportErr.message);
+            try {
+              await ctx.reply(`📄 Resume ${i + 1}: ${cand.candidateName}\n🎯 ATS Score: ${cand.overallScore}% — ${cand.verdict}\n⚠️ Detailed report had a formatting issue.`);
+            } catch (_) { /* ignore fallback errors */ }
+          }
 
-          // Small delay between messages to avoid Telegram rate limiting
           if (i < analyzedCandidates.length - 1) {
             await new Promise(r => setTimeout(r, 800));
           }
         }
 
-        // After all individual reports, send the final comparative ranking leaderboard
+        // Send the final comparative ranking leaderboard
+        console.log(`[Batch] Sending final ranking...`);
         await new Promise(r => setTimeout(r, 500));
-        const rankingReport = Formatters.formatFinalRanking(analyzedCandidates, rankingData);
-        await replySafe(ctx, rankingReport, Keyboards.batchActions(analyzedCandidates));
+        try {
+          const rankingReport = Formatters.formatFinalRanking(analyzedCandidates, rankingData);
+          await replySafe(ctx, rankingReport, Keyboards.batchActions(analyzedCandidates));
+          console.log(`[Batch] ✅ Ranking sent`);
+        } catch (rankErr) {
+          console.error(`[Batch] ❌ Ranking failed:`, rankErr.message);
+          await ctx.reply(`🏆 Ranking could not be formatted. Use /rankings to view.`).catch(() => {});
+        }
       }
     } catch (err) {
       await handleGlobalError(ctx, err, 'Resume Processing');
@@ -241,6 +253,7 @@ export function createTelegramBot() {
       if (!session.jobDescription || session.state === 'WAITING_FOR_JD' || session.state === 'IDLE') {
         const statusMsgId = await updateStatus(ctx, null, `🧠 *Understanding Job Description & prioritizing requirements...*`);
         
+        await SessionService.clearSessionCandidates(session.sessionId);
         await SessionService.updateSession(session.sessionId, { state: 'ANALYZING_JD' });
         const jdProfile = await JDAnalyzer.analyzeJobDescription(extractedText, detectedSourceType, filename);
         
@@ -305,6 +318,7 @@ export function createTelegramBot() {
       if (!session.jobDescription || session.state === 'WAITING_FOR_JD' || session.state === 'IDLE') {
         const statusMsgId = await updateStatus(ctx, null, `🧠 *Analyzing Job Description text & building priorities...*`);
         
+        await SessionService.clearSessionCandidates(session.sessionId);
         await SessionService.updateSession(session.sessionId, { state: 'ANALYZING_JD' });
         const jdProfile = await JDAnalyzer.analyzeJobDescription(text, 'TEXT');
         

@@ -100,6 +100,21 @@ export class SessionService {
   }
 
   /**
+   * Clear all candidates for a specific session
+   */
+  static async clearSessionCandidates(sessionId) {
+    inMemoryCandidates.delete(sessionId);
+
+    if (isDbConnected()) {
+      try {
+        await CandidateAnalysisModel.deleteMany({ sessionId });
+      } catch (err) {
+        console.warn(`[SessionService] DB delete candidates failed: ${err.message}`);
+      }
+    }
+  }
+
+  /**
    * Save candidate analysis result
    */
   static async saveCandidateAnalysis(analysis) {
