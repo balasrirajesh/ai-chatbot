@@ -26,10 +26,10 @@ export function createTelegramBot() {
   const updateStatus = async (ctx, messageId, text) => {
     try {
       if (messageId) {
-        await ctx.telegram.editMessageText(ctx.chat.id, messageId, null, text, { parse_mode: 'Markdown' });
+        await ctx.telegram.editMessageText(ctx.chat.id, messageId, null, text, { parse_mode: 'HTML' });
         return messageId;
       } else {
-        const msg = await ctx.reply(text, { parse_mode: 'Markdown' });
+        const msg = await ctx.reply(text, { parse_mode: 'HTML' });
         return msg.message_id;
       }
     } catch (err) {
@@ -41,7 +41,13 @@ export function createTelegramBot() {
     const chunks = Formatters.splitMessage(text);
     for (let i = 0; i < chunks.length; i++) {
       const opts = (i === chunks.length - 1) ? extra : {};
-      await ctx.reply(chunks[i], { parse_mode: 'Markdown', ...opts });
+      try {
+        await ctx.reply(chunks[i], { parse_mode: 'HTML', ...opts });
+      } catch (err) {
+        // Fallback to plain text if Telegram fails HTML parsing
+        const stripped = chunks[i].replace(/<[^>]+>/g, '');
+        await ctx.reply(stripped, { ...opts });
+      }
     }
   };
 
@@ -179,16 +185,17 @@ export function createTelegramBot() {
       await SessionService.updateSession(sessionId, { state: 'RESULT_READY' });
       await updateStatus(ctx, statusMsgId, `✅ *Batch Analysis Complete!*`);
 
-      // Send individual reports
-      for (const cand of analyzedCandidates) {
-        await replySafe(ctx, Formatters.formatCandidateReport(cand), Keyboards.candidateActions(cand.candidateId));
-      }
+      const allCandidates = await SessionService.getSessionCandidates(sessionId);
+      const rankingData = RankingEngine.rankCandidates(allCandidates, session.jobDescription);
 
-      // If batch had multiple candidates, also send the comparative ranking immediately
-      if (analyzedCandidates.length > 1) {
-        const allCandidates = await SessionService.getSessionCandidates(sessionId);
-        const rankingData = RankingEngine.rankCandidates(allCandidates, session.jobDescription);
-        await replySafe(ctx, Formatters.formatRankings(rankingData), Keyboards.rankingActions(allCandidates));
+      if (analyzedCandidates.length === 1) {
+        // Single resume upload: deliver full single report with direct action buttons
+        const cand = analyzedCandidates[0];
+        await replySafe(ctx, Formatters.formatCandidateReport(cand), Keyboards.candidateActions(cand.candidateId));
+      } else {
+        // Multi-resume batch upload: deliver ONE consolidated batch overview message with candidate detail buttons
+        const consolidatedReport = Formatters.formatConsolidatedBatchReport(analyzedCandidates, rankingData);
+        await replySafe(ctx, consolidatedReport, Keyboards.batchActions(analyzedCandidates));
       }
     } catch (err) {
       await handleGlobalError(ctx, err, 'Resume Processing');
@@ -245,9 +252,11 @@ export function createTelegramBot() {
 
         // Reset debounce timer to collect concurrent multi-file uploads into one batch
         if (queueData.timer) clearTimeout(queueData.timer);
+        
+        // 2.5s debounce ensures all files in a multi-file drag-and-drop are completely received before starting analysis
         queueData.timer = setTimeout(() => {
           processBatchResumes(ctx, session.sessionId, session);
-        }, 1500); // 1.5s debounce window collects multi-file drops seamlessly
+        }, 2500);
       }
     } catch (err) {
       return handleGlobalError(ctx, err, 'Document Upload');

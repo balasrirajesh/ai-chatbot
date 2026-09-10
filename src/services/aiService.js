@@ -18,7 +18,22 @@ export class AIService {
       }
     }
 
-    if (config.ai.openaiApiKey) {
+    if (config.ai.provider === 'openrouter' && (config.ai.openrouterApiKey || config.ai.openaiApiKey)) {
+      try {
+        this.openrouterClient = new OpenAI({
+          baseURL: 'https://openrouter.ai/api/v1',
+          apiKey: config.ai.openrouterApiKey || config.ai.openaiApiKey,
+          defaultHeaders: {
+            'HTTP-Referer': 'https://github.com/balasrirajesh/ai-chatbot',
+            'X-Title': 'Hashira Resume Bot'
+          }
+        });
+      } catch (err) {
+        console.warn(`[AIService] OpenRouter client init warning: ${err.message}`);
+      }
+    }
+
+    if (config.ai.openaiApiKey && config.ai.provider === 'openai') {
       try {
         this.openaiClient = new OpenAI({ apiKey: config.ai.openaiApiKey });
       } catch (err) {
@@ -61,7 +76,7 @@ export class AIService {
   async generateJSON(prompt, systemInstruction = 'You are an expert AI recruiting assistant. Return only valid, strictly formatted JSON.') {
     // Check if any keys configured before attempting
     this.initClients();
-    if (!this.geminiClient && !this.openaiClient) {
+    if (!this.geminiClient && !this.openaiClient && !this.openrouterClient) {
       throw new Error('No AI API key configured in .env file.');
     }
 
@@ -91,7 +106,22 @@ export class AIService {
             return AIService.extractJsonFromResponse(text);
           }
 
-          if (config.ai.provider === 'openai' || (!this.geminiClient && this.openaiClient)) {
+          if (config.ai.provider === 'openrouter' && this.openrouterClient) {
+            const response = await this.openrouterClient.chat.completions.create({
+              model: config.ai.openrouterModel,
+              response_format: { type: 'json_object' },
+              temperature: 0.1,
+              messages: [
+                { role: 'system', content: systemInstruction },
+                { role: 'user', content: prompt }
+              ]
+            });
+
+            const text = response.choices[0]?.message?.content;
+            return AIService.extractJsonFromResponse(text);
+          }
+
+          if (config.ai.provider === 'openai' && this.openaiClient) {
             const response = await this.openaiClient.chat.completions.create({
               model: config.ai.openaiModel,
               response_format: { type: 'json_object' },

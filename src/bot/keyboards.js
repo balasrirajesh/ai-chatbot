@@ -41,11 +41,35 @@ export const Keyboards = {
    */
   rankingActions(candidates = []) {
     const buttons = candidates.map(c => [
-      Markup.button.callback(`👤 ${c.candidateName} (${c.overallScore}%)`, `cand_details_${c.candidateId}`)
+      Markup.button.callback(`👤 ${c.candidateName} (${c.overallScore}%)`, `cand_details_${c.candidateId}`),
+      Markup.button.callback(`🎓 Roadmap`, `cand_courses_${c.candidateId}`)
     ]);
 
     buttons.push([
-      Markup.button.callback('➕ Add More Resumes', 'add_resumes'),
+      Markup.button.callback('🔄 New Analysis', 'new_session')
+    ]);
+
+    return Markup.inlineKeyboard(buttons);
+  },
+
+  /**
+   * Inline buttons for consolidated batch report
+   */
+  batchActions(candidates = []) {
+    const buttons = [];
+    
+    // Group candidate buttons in rows of 2 for clean mobile display
+    for (let i = 0; i < candidates.length; i += 2) {
+      const row = [];
+      row.push(Markup.button.callback(`🔍 ${candidates[i].candidateName.slice(0, 15)}`, `cand_details_${candidates[i].candidateId}`));
+      if (candidates[i + 1]) {
+        row.push(Markup.button.callback(`🔍 ${candidates[i + 1].candidateName.slice(0, 15)}`, `cand_details_${candidates[i + 1].candidateId}`));
+      }
+      buttons.push(row);
+    }
+
+    buttons.push([
+      Markup.button.callback('🏆 Leaderboard', 'show_rankings'),
       Markup.button.callback('🔄 New JD', 'new_session')
     ]);
 

@@ -17,11 +17,13 @@ export const config = {
   },
 
   ai: {
-    provider: (process.env.AI_PROVIDER || 'gemini').toLowerCase(), // 'gemini' | 'openai'
+    provider: (process.env.AI_PROVIDER || 'gemini').toLowerCase(), // 'gemini' | 'openai' | 'openrouter'
     geminiApiKey: process.env.GEMINI_API_KEY || process.env.AI_API_KEY || '',
     geminiModel: process.env.GEMINI_MODEL || 'gemini-1.5-flash',
-    openaiApiKey: process.env.OPENAI_API_KEY || '',
-    openaiModel: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    openaiApiKey: process.env.OPENAI_API_KEY || process.env.OPENROUTER_API_KEY || '',
+    openaiModel: process.env.OPENAI_MODEL || process.env.OPENROUTER_MODEL || 'gpt-4o-mini',
+    openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
+    openrouterModel: process.env.OPENROUTER_MODEL || 'google/gemini-2.0-flash-lite-preview-02-05:free',
     timeoutMs: parseInt(process.env.AI_TIMEOUT_MS || '30000', 10),
     maxRetries: parseInt(process.env.AI_MAX_RETRIES || '2', 10),
   },
